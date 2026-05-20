@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  background: theme('colors.ocean.900');
+  color: white;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

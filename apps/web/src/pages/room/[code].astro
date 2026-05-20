@@ -1,0 +1,22 @@
+---
+import GameRoom from '../../components/GameRoom';
+import '../../styles/global.css';
+
+export const prerender = false;
+
+const { code } = Astro.params;
+const safeCode = (code ?? '').toUpperCase();
+---
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Sala {safeCode} · Battleship</title>
+  </head>
+  <body class="min-h-screen p-4">
+    <main class="max-w-5xl mx-auto">
+      <GameRoom code={safeCode} client:only="react" />
+    </main>
+  </body>
+</html>
