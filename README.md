@@ -32,8 +32,6 @@ pnpm dev   # arranca web (:4321) y server (:3001) en paralelo
 
 ## Roadmap
 
-Plan de implementación: ver el plan aprobado en `~/.claude/plans/`.
-
 Fases:
 - [x] Fase 0 — Scaffolding
 - [x] Fase 1 — Lógica pura compartida (38 tests, 97.7% cobertura)
