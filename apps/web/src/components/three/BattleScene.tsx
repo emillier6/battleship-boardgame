@@ -44,6 +44,17 @@ function isHitOnMyBoard(at: Coord, myBoard: Board): boolean {
   return false;
 }
 
+function shipCoversCell(ship: Ship, at: Coord): boolean {
+  for (let i = 0; i < ship.length; i++) {
+    const c = {
+      x: ship.origin.x + (ship.orientation === 'H' ? i : 0),
+      y: ship.origin.y + (ship.orientation === 'V' ? i : 0),
+    };
+    if (coordEq(c, at)) return true;
+  }
+  return false;
+}
+
 export function BattleScene({
   myBoard,
   opponentShips = [],
@@ -71,13 +82,38 @@ export function BattleScene({
   const inFlightCells = useMemo(() => {
     const selfSet = new Set<string>();
     const oppSet = new Set<string>();
+    const selfCoords: Coord[] = [];
+    const oppCoords: Coord[] = [];
     for (const a of active) {
       const key = `${a.at.x},${a.at.y}`;
-      if (a.fromBoard === 'self') oppSet.add(key);
-      else selfSet.add(key);
+      if (a.fromBoard === 'self') {
+        oppSet.add(key);
+        oppCoords.push(a.at);
+      } else {
+        selfSet.add(key);
+        selfCoords.push(a.at);
+      }
     }
-    return { self: selfSet, opp: oppSet };
+    return { self: selfSet, opp: oppSet, selfCoords, oppCoords };
   }, [active]);
+
+  const displayMyShips = useMemo(() => {
+    if (inFlightCells.selfCoords.length === 0) return myBoard.ships;
+    return myBoard.ships.map((ship) => {
+      if (!ship.sunk) return ship;
+      const hitByInFlight = inFlightCells.selfCoords.some((c) => shipCoversCell(ship, c));
+      return hitByInFlight ? { ...ship, sunk: false } : ship;
+    });
+  }, [myBoard.ships, inFlightCells.selfCoords]);
+
+  const displayOpponentShips = useMemo(() => {
+    if (inFlightCells.oppCoords.length === 0) return opponentShips;
+    return opponentShips.map((ship) => {
+      if (!ship.sunk) return ship;
+      const hitByInFlight = inFlightCells.oppCoords.some((c) => shipCoversCell(ship, c));
+      return hitByInFlight ? { ...ship, sunk: false } : ship;
+    });
+  }, [opponentShips, inFlightCells.oppCoords]);
 
   const completeAnimation = (id: number, key: string) => {
     setActive((prev) => prev.filter((a) => a.id !== id));
@@ -128,7 +164,7 @@ export function BattleScene({
       <Ocean />
 
       <BoardMesh origin={SELF_ORIGIN} highlightCells={myCellHighlights} />
-      {myBoard.ships.map((ship) => (
+      {displayMyShips.map((ship) => (
         <ShipMesh key={`self-${ship.id}`} ship={ship} origin={SELF_ORIGIN} />
       ))}
 
@@ -137,7 +173,7 @@ export function BattleScene({
         highlightCells={aimHighlight}
         onCellClick={freezeInteraction ? undefined : onCellClick}
       />
-      {opponentShips.map((ship) => (
+      {displayOpponentShips.map((ship) => (
         <ShipMesh key={`opp-${ship.id}`} ship={ship} origin={OPP_ORIGIN} />
       ))}
 
