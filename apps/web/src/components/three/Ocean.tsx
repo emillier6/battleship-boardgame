@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Mesh, ShaderMaterial } from 'three';
 
@@ -7,25 +7,68 @@ const vertexShader = `
   varying float vHeight;
   varying vec2 vUv;
 
-  vec3 gerstner(vec2 pos, vec2 dir, float wavelength, float steepness, float speed, float t) {
-    float k = 6.28318 / wavelength;
-    float c = speed;
-    vec2 d = normalize(dir);
-    float f = k * (dot(d, pos) - c * t);
-    float a = steepness / k;
-    return vec3(d.x * (a * cos(f)), a * sin(f), d.y * (a * cos(f)));
+  float hash11(float n) {
+    return fract(sin(n * 127.1) * 43758.5453123);
+  }
+
+  vec2 hash21(float n) {
+    return fract(sin(vec2(n * 127.1, n * 311.7)) * 43758.5453123);
+  }
+
+  // Localized wave: spawns at a random point, drifts in a random direction,
+  // rises, peaks, then sinks back to the surface. The footprint is an
+  // elongated, lobed shape rather than a perfect circle.
+  float waveBlob(vec2 p, float t, float i) {
+    float seed = i * 13.37 + 1.0;
+    float period = 7.0 + hash11(seed) * 5.0;
+    float offset = hash11(seed + 1.1) * period;
+    float phase = mod(t + offset, period);
+    float life = phase / period;
+
+    vec2 spawn = (hash21(seed + 2.2) - 0.5) * 80.0;
+    float dirAng = hash11(seed + 3.3) * 6.2831853;
+    vec2 dir = vec2(cos(dirAng), sin(dirAng));
+    vec2 perp = vec2(-dir.y, dir.x);
+    float speed = 0.6 + hash11(seed + 4.4) * 1.2;
+
+    vec2 center = spawn + dir * speed * phase;
+    vec2 rel = p - center;
+    // Project into the blob's local frame (along/perpendicular to travel).
+    float u = dot(rel, dir);
+    float v = dot(rel, perp);
+    float stretch = 1.2 + hash11(seed + 6.6) * 0.5;
+    vec2 local = vec2(u / stretch, v);
+    float r = length(local);
+
+    // Irregular outline: lobed radial modulation that also drifts slowly.
+    float a = atan(local.y, local.x);
+    float wobble = 1.0
+      + 0.30 * sin(a * 3.0 + seed * 1.7)
+      + 0.18 * sin(a * 5.0 - seed * 2.3 + uTime * 0.35)
+      + 0.10 * sin(a * 7.0 + seed * 4.1);
+
+    float radius = 0.7 + hash11(seed + 5.5) * 0.8;
+    float effR = radius * wobble;
+
+    float env = sin(life * 3.141593);
+    env *= env;
+    float fall = exp(-(r * r) / (effR * effR));
+    return env * fall;
   }
 
   void main() {
     vUv = uv;
     vec3 pos = position;
     vec2 p = pos.xy;
-    vec3 g1 = gerstner(p, vec2(1.0, 0.3), 8.0, 0.18, 1.2, uTime);
-    vec3 g2 = gerstner(p, vec2(-0.5, 1.0), 5.0, 0.13, 0.8, uTime);
-    vec3 g3 = gerstner(p, vec2(0.6, -0.8), 3.0, 0.08, 1.6, uTime);
-    pos.x += g1.x + g2.x + g3.x;
-    pos.y += g1.z + g2.z + g3.z;
-    pos.z += g1.y + g2.y + g3.y;
+
+    float h = 0.0;
+    for (int i = 0; i < 60; i++) {
+      h += waveBlob(p, uTime, float(i));
+    }
+    // Very subtle background undulation so the surface is never perfectly flat.
+    h += 0.03 * sin(p.x * 0.28 + uTime * 0.5) * cos(p.y * 0.22 + uTime * 0.4);
+
+    pos.z += h * 0.45;
     vHeight = pos.z;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }
@@ -51,6 +94,7 @@ const fragmentShader = `
 export function Ocean() {
   const meshRef = useRef<Mesh>(null);
   const matRef = useRef<ShaderMaterial>(null);
+  const uniforms = useMemo(() => ({ uTime: { value: 0 } }), []);
 
   useFrame((_, delta) => {
     const u = matRef.current?.uniforms.uTime;
@@ -69,7 +113,7 @@ export function Ocean() {
         ref={matRef}
         vertexShader={vertexShader}
         fragmentShader={fragmentShader}
-        uniforms={{ uTime: { value: 0 } }}
+        uniforms={uniforms}
       />
     </mesh>
   );
